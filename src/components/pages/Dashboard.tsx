@@ -63,20 +63,20 @@ export default function Dashboard() {
   })
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       {/* Welcome banner */}
-      <div className="flex items-center gap-4">
-        <Sparkles size={20} className="text-gold-600" />
+      <div className="flex items-center gap-3">
+        <Sparkles size={18} className="text-gold-600 shrink-0" />
         <div>
           <p className="luxury-label text-gold-700">Bem-vinda</p>
-          <h2 className="heading-serif text-3xl mt-1">Visão Geral do Instituto</h2>
+          <h2 className="heading-serif text-2xl sm:text-3xl mt-1">Visão Geral do Instituto</h2>
         </div>
       </div>
 
       <div className="gold-divider" />
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+      {/* Stats — 1 coluna no mobile, 2 no sm, 4 no lg */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Total de Pacientes"
           value={stats?.total ?? 0}
@@ -104,11 +104,11 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Patients + Contracts */}
-      <div className="grid lg:grid-cols-3 gap-6">
+      {/* Patients + Contracts — empilhado no mobile, lado a lado no lg */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Patients */}
         <Card padding={false} className="lg:col-span-2">
-          <div className="flex items-center justify-between px-6 py-5 border-b border-ink-100">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5 border-b border-ink-100">
             <div>
               <p className="luxury-label text-gold-700 mb-1">Pacientes</p>
               <h3 className="heading-serif text-lg">Cadastros Recentes</h3>
@@ -130,9 +130,9 @@ export default function Dashboard() {
               <Link
                 key={p.id}
                 to={`/pastas/${p.id}`}
-                className="flex items-center gap-4 px-6 py-4 hover:bg-cream-100 transition-colors"
+                className="flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4 hover:bg-cream-100 transition-colors"
               >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gold-100 text-gold-800 text-sm font-semibold">
+                <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full bg-gold-100 text-gold-800 text-sm font-semibold">
                   {getInitials(p.nome)}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -150,7 +150,7 @@ export default function Dashboard() {
 
         {/* Recent Contracts */}
         <Card padding={false}>
-          <div className="px-6 py-5 border-b border-ink-100">
+          <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-ink-100">
             <p className="luxury-label text-gold-700 mb-1">Documentos</p>
             <h3 className="heading-serif text-lg">Contratos Recentes</h3>
           </div>
@@ -162,13 +162,13 @@ export default function Dashboard() {
               <Link
                 key={c.id}
                 to={`/contratos/${c.id}`}
-                className="block px-6 py-4 hover:bg-cream-100 transition-colors"
+                className="block px-4 sm:px-6 py-3 sm:py-4 hover:bg-cream-100 transition-colors"
               >
                 <p className="text-sm font-medium text-ink-900 truncate">{c.titulo}</p>
                 <p className="text-xs text-ink-500 truncate mt-0.5">
                   {(c.patients as any)?.nome}
                 </p>
-                <div className="flex items-center justify-between mt-2.5">
+                <div className="flex items-center justify-between mt-2">
                   <Badge label={c.status} className={getStatusColor(c.status)} />
                   <span className="text-xs text-ink-400">{formatDate(c.created_at)}</span>
                 </div>
