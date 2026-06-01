@@ -3,7 +3,6 @@ import * as pdfjsLib from 'pdfjs-dist'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
 
-// ─── Tipos ───────────────────────────────────────────────────────────────────
 export interface ParsedDocument {
   html: string
   text: string
@@ -18,8 +17,8 @@ export interface VariableSuggestion {
   sugestao: string
   ocorrencias: number
   aceito: boolean
-  contexto?: string         // texto ao redor do campo (ajuda a nomear)
-  precisaNomear?: boolean   // true = sistema não soube nomear, usuário precisa decidir
+  contexto?: string
+  precisaNomear?: boolean
 }
 
 export type VariableType =
@@ -28,14 +27,156 @@ export type VariableType =
   | 'nome_maiusculo' | 'campo_em_branco' | 'parcelas' | 'manual'
   | 'precisa_nomear'
 
+const CONTRACT_STYLES = `
+<style>
+  .contract-doc {
+    font-family: 'Calibri', 'Arial', sans-serif;
+    font-size: 11pt;
+    line-height: 1.5;
+    color: #000000;
+    max-width: 100%;
+  }
+  .contract-doc p {
+    margin: 0 0 8pt 0;
+    text-align: justify;
+  }
+  .contract-doc p.sem-espaco {
+    margin: 0;
+  }
+  .contract-doc p.centralizado {
+    text-align: center;
+  }
+  .contract-doc p.direita {
+    text-align: right;
+  }
+  .contract-doc h1 {
+    font-size: 12pt;
+    font-weight: bold;
+    text-align: center;
+    margin: 12pt 0 6pt;
+    text-transform: uppercase;
+  }
+  .contract-doc h2 {
+    font-size: 11pt;
+    font-weight: bold;
+    margin: 10pt 0 4pt;
+  }
+  .contract-doc h3 {
+    font-size: 11pt;
+    font-weight: bold;
+    margin: 8pt 0 4pt;
+  }
+  .contract-doc h4 {
+    font-size: 11pt;
+    font-weight: bold;
+    margin: 6pt 0 2pt;
+  }
+  .contract-doc ul {
+    margin: 4pt 0 8pt 0;
+    padding-left: 28pt;
+    list-style-type: disc;
+  }
+  .contract-doc ol {
+    margin: 4pt 0 8pt 0;
+    padding-left: 28pt;
+  }
+  .contract-doc li {
+    margin-bottom: 3pt;
+    text-align: justify;
+  }
+  .contract-doc table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8pt 0;
+    font-size: 11pt;
+  }
+  .contract-doc td, .contract-doc th {
+    border: 1px solid #000;
+    padding: 3pt 6pt;
+    vertical-align: top;
+  }
+  .contract-doc strong, .contract-doc b { font-weight: bold; }
+  .contract-doc em, .contract-doc i { font-style: italic; }
+  .contract-doc u { text-decoration: underline; }
+  .contract-doc .linha-assinatura {
+    display: inline-block;
+    border-bottom: 1px solid #000;
+    vertical-align: bottom;
+    min-height: 1em;
+  }
+</style>
+`
+
 export async function parseWord(file: File): Promise<ParsedDocument> {
   const arrayBuffer = await file.arrayBuffer()
-  const result = await mammoth.convertToHtml({ arrayBuffer })
-  const text = await mammoth.extractRawText({ arrayBuffer })
-  ;(window as any).__debugTexto = text.value
+
+  const styleMap = [
+    "p[style-name='heading 1'] => h1:fresh",
+    "p[style-name='heading 2'] => h2:fresh",
+    "p[style-name='heading 3'] => h3:fresh",
+    "p[style-name='heading 4'] => h4:fresh",
+    "p[style-name='Heading 1'] => h1:fresh",
+    "p[style-name='Heading 2'] => h2:fresh",
+    "p[style-name='Heading 3'] => h3:fresh",
+    "p[style-name='Heading 4'] => h4:fresh",
+    "p[style-name='Title'] => h1:fresh",
+    "p[style-name='Título'] => h1:fresh",
+    "p[style-name='Subtitle'] => h2:fresh",
+    "p[style-name='Subtítulo'] => h2:fresh",
+    "p[style-name='List Paragraph'] => li:fresh",
+    "p[style-name='List Bullet'] => li:fresh",
+    "p[style-name='List Number'] => li:fresh",
+    "p[style-name='Parágrafo da Lista'] => li:fresh",
+    "p[style-name='Com marcadores'] => li:fresh",
+    "p[style-name='Numerada'] => li:fresh",
+    "p[style-name='Lista'] => li:fresh",
+    "p[style-name='Body Text'] => p:fresh",
+    "p[style-name='Corpo de texto'] => p:fresh",
+    "p[style-name='Body Text 2'] => p:fresh",
+    "p[style-name='Normal'] => p:fresh",
+    "p[style-name='Default'] => p:fresh",
+    "p[style-name='No Spacing'] => p.sem-espaco:fresh",
+    "p[style-name='Sem Espaçamento'] => p.sem-espaco:fresh",
+    "r[style-name='Strong'] => strong",
+    "r[style-name='Forte'] => strong",
+    "r[style-name='Emphasis'] => em",
+    "r[style-name='Ênfase'] => em",
+    "p[style-name='Header'] => !",
+    "p[style-name='Cabeçalho'] => !",
+    "p[style-name='Footer'] => !",
+    "p[style-name='Rodapé'] => !",
+  ]
+
+  const result = await mammoth.convertToHtml(
+    { arrayBuffer },
+    {
+      styleMap,
+      convertImage: mammoth.images.imgElement(async (image: any) => {
+        const base64 = await image.read('base64')
+        return { src: `data:${image.contentType};base64,${base64}` }
+      }),
+    }
+  )
+
+  const textResult = await mammoth.extractRawText({ arrayBuffer })
+  ;(window as any).__debugTexto = textResult.value
+
+  let html = result.value
+
+  // Parágrafos vazios → espaçadores
+  html = html.replace(/<p>\s*<\/p>/g, '<p style="margin:4pt 0;">&nbsp;</p>')
+
+  // Underlines (___) → linha visual
+  html = html.replace(/_{3,}/g, (match) => {
+    const width = Math.min(match.length * 5.5, 320)
+    return `<span class="linha-assinatura" style="width:${width}px;">&nbsp;</span>`
+  })
+
+  const finalHtml = `${CONTRACT_STYLES}<div class="contract-doc">${html}</div>`
+
   return {
-    html: result.value,
-    text: text.value,
+    html: finalHtml,
+    text: textResult.value,
     format: 'docx',
     fileName: file.name,
   }
@@ -53,7 +194,8 @@ export async function parsePDF(file: File): Promise<ParsedDocument> {
     text += pageText + '\n\n'
     html += `<p>${pageText.replace(/\n/g, '<br>')}</p>\n`
   }
-  return { html, text, format: 'pdf', fileName: file.name }
+  const finalHtml = `${CONTRACT_STYLES}<div class="contract-doc">${html}</div>`
+  return { html: finalHtml, text, format: 'pdf', fileName: file.name }
 }
 
 function normalizarRotulo(rotulo: string): string {
@@ -77,7 +219,6 @@ function slugify(text: string): string {
     .slice(0, 30)
 }
 
-// ─── Mapa de rótulos conhecidos ─────────────────────────────────────────────
 const ROTULOS_CONHECIDOS: Record<string, { sugestao: string; tipo: VariableType }> = {
   'nome': { sugestao: '{{paciente_nome}}', tipo: 'nome_maiusculo' },
   'nome completo': { sugestao: '{{paciente_nome}}', tipo: 'nome_maiusculo' },
@@ -189,9 +330,6 @@ function isRotuloValido(rotulo: string): boolean {
   return true
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// DETECÇÃO PRINCIPAL
-// ═════════════════════════════════════════════════════════════════════════════
 export function detectVariableSuggestions(text: string): VariableSuggestion[] {
   const sugestoesMap = new Map<string, VariableSuggestion>()
   const occupiedRanges: Array<[number, number]> = []
@@ -221,7 +359,7 @@ export function detectVariableSuggestions(text: string): VariableSuggestion[] {
       tipo,
       sugestao,
       ocorrencias: 1,
-      aceito: !precisaNomear,  // só aceita automaticamente se SOUBER o nome
+      aceito: !precisaNomear,
       contexto,
       precisaNomear,
     })
@@ -229,7 +367,7 @@ export function detectVariableSuggestions(text: string): VariableSuggestion[] {
 
   let match: RegExpExecArray | null
 
-  // ─── ETAPA 1: RÓTULO + R$ + UNDERLINE ───
+  // ─── ETAPA 1: RÓTULO + R$ + UNDERLINE ───────────────────────────────────────
   const labelMoneyRegex = /([A-ZÁÉÍÓÚÃÕÇa-záéíóúãõç][A-ZÁÉÍÓÚÃÕÇa-záéíóúãõçA-Za-z \t\-]{1,50}?)\s*:\s*R\$\s*_{2,}/g
   while ((match = labelMoneyRegex.exec(text)) !== null) {
     const range: [number, number] = [match.index, match.index + match[0].length]
@@ -242,7 +380,7 @@ export function detectVariableSuggestions(text: string): VariableSuggestion[] {
     add(match[0], knownMatch?.sugestao ?? `{{${slug}}}`, 'valor_em_branco', range)
   }
 
-  // ─── ETAPA 2: RÓTULO + DATA EM BRANCO ───
+  // ─── ETAPA 2: RÓTULO + DATA EM BRANCO ───────────────────────────────────────
   const labelDateRegex = /([A-ZÁÉÍÓÚÃÕÇa-záéíóúãõç][A-ZÁÉÍÓÚÃÕÇa-záéíóúãõçA-Za-z \t\-]{1,50}?)\s*:\s*_{2,}\s*\/\s*_{2,}\s*\/\s*_{2,}/g
   while ((match = labelDateRegex.exec(text)) !== null) {
     const range: [number, number] = [match.index, match.index + match[0].length]
@@ -255,7 +393,7 @@ export function detectVariableSuggestions(text: string): VariableSuggestion[] {
     add(match[0], knownMatch?.sugestao ?? `{{data_${slug}}}`, 'data_em_branco', range)
   }
 
-  // ─── ETAPA 3: RÓTULO + UNDERLINE (mesma linha) ───
+  // ─── ETAPA 3: RÓTULO + UNDERLINE (mesma linha) ──────────────────────────────
   const labelUnderlineRegex = /([A-ZÁÉÍÓÚÃÕÇa-záéíóúãõç][A-ZÁÉÍÓÚÃÕÇa-záéíóúãõçA-Za-z0-9 \t\/\-]{1,50}?)\s*:\s*_{3,}/g
   while ((match = labelUnderlineRegex.exec(text)) !== null) {
     const range: [number, number] = [match.index, match.index + match[0].length]
@@ -265,12 +403,10 @@ export function detectVariableSuggestions(text: string): VariableSuggestion[] {
     const knownMatch = getRotuloMatch(rotulo)
     const slug = slugify(normalizarRotulo(rotulo))
     if (!slug) continue
-    const sugestao = knownMatch?.sugestao ?? `{{${slug}}}`
-    const tipo = knownMatch?.tipo ?? 'campo_em_branco'
-    add(match[0], sugestao, tipo, range)
+    add(match[0], knownMatch?.sugestao ?? `{{${slug}}}`, knownMatch?.tipo ?? 'campo_em_branco', range)
   }
 
-  // ─── ETAPA 3.5: RÓTULO EM UMA LINHA + UNDERLINE NA LINHA DE BAIXO ───
+  // ─── ETAPA 3.5: RÓTULO + UNDERLINE (linha de baixo) ─────────────────────────
   const labelMultilineRegex = /([A-ZÁÉÍÓÚÃÕÇa-záéíóúãõç][A-ZÁÉÍÓÚÃÕÇa-záéíóúãõçA-Za-z0-9 \t\-]{1,60}?)\s*:\s*\n+\s*_{5,}/g
   while ((match = labelMultilineRegex.exec(text)) !== null) {
     const range: [number, number] = [match.index, match.index + match[0].length]
@@ -280,33 +416,13 @@ export function detectVariableSuggestions(text: string): VariableSuggestion[] {
     const knownMatch = getRotuloMatch(rotulo)
     const slug = slugify(normalizarRotulo(rotulo))
     if (!slug) continue
-    const sugestao = knownMatch?.sugestao ?? `{{${slug}}}`
-    const tipo = knownMatch?.tipo ?? 'campo_em_branco'
-    add(match[0], sugestao, tipo, range)
+    add(match[0], knownMatch?.sugestao ?? `{{${slug}}}`, knownMatch?.tipo ?? 'campo_em_branco', range)
   }
 
-  // ─── ETAPA 4: PADRÕES BR PREENCHIDOS ───
-  const dataPatterns: Array<{ regex: RegExp; tipo: VariableType; sugestao: string }> = [
-    { regex: /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g, tipo: 'cpf', sugestao: '{{paciente_cpf}}' },
-    { regex: /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/g, tipo: 'cnpj', sugestao: '{{clinica_cnpj}}' },
-    { regex: /\b\d{2}\/\d{2}\/\d{4}\b/g, tipo: 'data', sugestao: '{{data_hoje}}' },
-    { regex: /R\$\s*[\d.,]+/g, tipo: 'valor', sugestao: '{{valor_total}}' },
-    { regex: /\b\d{5}-\d{3}\b/g, tipo: 'cep', sugestao: '{{paciente_cep}}' },
-    { regex: /\(\d{2}\)\s*\d{4,5}-\d{4}/g, tipo: 'telefone', sugestao: '{{paciente_telefone}}' },
-    { regex: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, tipo: 'email', sugestao: '{{paciente_email}}' },
-  ]
-
-  for (const { regex, tipo, sugestao } of dataPatterns) {
-    const re = new RegExp(regex.source, 'g')
-    while ((match = re.exec(text)) !== null) {
-      if (match[0].includes('{{')) continue
-      const range: [number, number] = [match.index, match.index + match[0].length]
-      if (isOverlap(range[0], range[1])) continue
-      add(match[0], sugestao, tipo, range)
-    }
-  }
-
-  // ─── ETAPA 5: DATAS EM BRANCO ISOLADAS ───
+  // ─── ETAPA 4: DATAS EM BRANCO ISOLADAS ──────────────────────────────────────
+  // ⚠️ REMOVIDA a detecção automática de CPF, CNPJ, telefone, email e datas
+  // preenchidas — esses dados pertencem ao instituto e NÃO devem virar variáveis.
+  // Apenas campos em branco (___) são convertidos em variáveis.
   const isolatedDateRegex = /_{2,}\s*\/\s*_{2,}\s*\/\s*_{2,}/g
   while ((match = isolatedDateRegex.exec(text)) !== null) {
     const range: [number, number] = [match.index, match.index + match[0].length]
@@ -314,34 +430,21 @@ export function detectVariableSuggestions(text: string): VariableSuggestion[] {
     add(match[0], '{{data_assinatura}}', 'data_em_branco', range)
   }
 
-  // ─── ETAPA 6: CAMPOS EM BRANCO ISOLADOS — PRECISAM SER NOMEADOS ───
-  // Em vez de criar {{campo_1}} automaticamente, marca como "precisa nomear"
-  // O usuário decide o nome no editor
+  // ─── ETAPA 5: CAMPOS EM BRANCO ISOLADOS ─────────────────────────────────────
   const isolatedBlankRegex = /_{8,}/g
   let blankCount = 1
   while ((match = isolatedBlankRegex.exec(text)) !== null) {
     const range: [number, number] = [match.index, match.index + match[0].length]
     if (isOverlap(range[0], range[1])) continue
-
     const lineStart = text.lastIndexOf('\n', match.index) + 1
     const lineEnd = text.indexOf('\n', match.index)
     const line = text.slice(lineStart, lineEnd === -1 ? undefined : lineEnd)
     const lineWithoutUnderscores = line.replace(/_/g, '').trim()
-    if (lineWithoutUnderscores.length < 2) continue  // pula linhas só com _
-
-    // Pega contexto: 80 chars antes do underline (geralmente tem alguma pista do que é o campo)
+    if (lineWithoutUnderscores.length < 2) continue
     const contextStart = Math.max(0, match.index - 80)
     const contextEnd = Math.min(text.length, range[1] + 20)
     const contexto = text.slice(contextStart, contextEnd).replace(/\s+/g, ' ').trim()
-
-    add(
-      match[0],
-      `{{campo_pendente_${blankCount}}}`,
-      'precisa_nomear',
-      range,
-      contexto,
-      true  // precisaNomear = true
-    )
+    add(match[0], `{{campo_pendente_${blankCount}}}`, 'precisa_nomear', range, contexto, true)
     blankCount++
   }
 
@@ -361,20 +464,10 @@ export function applySuggestions(content: string, suggestions: VariableSuggestio
 }
 
 export const tipoLabels: Record<VariableType, string> = {
-  cpf: 'CPF',
-  cnpj: 'CNPJ',
-  rg: 'RG',
-  cep: 'CEP',
-  telefone: 'Telefone',
-  email: 'E-mail',
-  data: 'Data',
-  data_em_branco: 'Data em branco',
-  valor: 'Valor',
-  valor_em_branco: 'Valor a preencher',
-  nome_maiusculo: 'Nome',
-  campo_em_branco: 'Campo em branco',
-  parcelas: 'Parcelas',
-  manual: 'Manual',
+  cpf: 'CPF', cnpj: 'CNPJ', rg: 'RG', cep: 'CEP', telefone: 'Telefone',
+  email: 'E-mail', data: 'Data', data_em_branco: 'Data em branco',
+  valor: 'Valor', valor_em_branco: 'Valor a preencher', nome_maiusculo: 'Nome',
+  campo_em_branco: 'Campo em branco', parcelas: 'Parcelas', manual: 'Manual',
   precisa_nomear: '⚠️ Precisa nomear',
 }
 
