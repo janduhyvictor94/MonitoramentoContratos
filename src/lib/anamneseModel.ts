@@ -71,7 +71,7 @@ export const ANAMNESE_STEPS: AnamneseStep[] = [
     fields: [
       { key: 'queixa', type: 'textarea', label: null, required: true, placeholder: 'Descreva livremente...' },
       { key: 'queixa_tags', type: 'chips', label: 'Se ajudar, marque o que mais combina (opcional)', options: [
-        { v: 'rejuvenescimento', t: 'Rejuvenescimento' }, { v: 'contorno', t: 'Contorno corporal' },
+        { v: 'rejuvenescimento', t: 'Rejuvenescimento' },
         { v: 'manchas_acne', t: 'Manchas / acne' }, { v: 'ocasiao', t: 'Ocasião especial' },
         { v: 'prevencao', t: 'Prevenção / cuidado contínuo' }, { v: 'outro', t: 'Outro' },
       ] },
