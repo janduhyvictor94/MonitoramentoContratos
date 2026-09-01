@@ -71,9 +71,9 @@ export const ANAMNESE_STEPS: AnamneseStep[] = [
     fields: [
       { key: 'queixa', type: 'textarea', label: null, required: true, placeholder: 'Descreva livremente...' },
       { key: 'queixa_tags', type: 'chips', label: 'Se ajudar, marque o que mais combina (opcional)', options: [
-        { v: 'rejuvenescimento', t: 'Rejuvenescimento' },
-        { v: 'manchas_acne', t: 'Manchas / acne' }, { v: 'ocasiao', t: 'Ocasião especial' },
-        { v: 'prevencao', t: 'Prevenção / cuidado contínuo' }, { v: 'outro', t: 'Outro' },
+        { v: 'rejuvenescimento', t: 'Rejuvenescimento' }, { v: 'manchas_acne', t: 'Manchas / acne' },
+        { v: 'ocasiao', t: 'Ocasião especial' }, { v: 'prevencao', t: 'Prevenção / cuidado contínuo' },
+        { v: 'outro', t: 'Outro' },
       ] },
     ],
   },
@@ -93,12 +93,12 @@ export const ANAMNESE_STEPS: AnamneseStep[] = [
     id: 'evento', group: 'Ocasião especial', title: 'Tem alguma data especial se aproximando?',
     subtitle: 'Casamento, viagem, formatura, aniversário... (opcional)',
     fields: [
-      { key: 'evento', type: 'yesno', label: 'Existe uma ocasião especial no seu radar?',
+      { key: 'evento', type: 'yesno', label: 'Você já tem essa data em mente?',
         detailKey: 'evento_detalhe', detailPlaceholder: 'Qual e para quando, aproximadamente?' },
     ],
   },
   {
-    id: 'mesmo_dia', group: 'Seu interesse', title: 'Sobre o procedimento em si',
+    id: 'mesmo_dia', group: 'Seu interesse', title: 'Sobre o seu atendimento',
     subtitle: 'Se, na avaliação, você estiver apta(o) para o procedimento indicado:',
     fields: [
       { key: 'mesmo_dia', type: 'choice', label: null, options: [
@@ -138,7 +138,7 @@ export const ANAMNESE_STEPS: AnamneseStep[] = [
       { key: 'prioridade', type: 'choice', label: null, options: [
         { v: 'resultado', t: 'Ter o melhor resultado possível, independente do investimento' },
         { v: 'equilibrio', t: 'Um bom equilíbrio entre qualidade e custo' },
-        { v: 'custo', t: 'O menor custo possível' },
+        { v: 'custo', t: 'Prefiro começar com um investimento menor e ir evoluindo aos poucos' },
       ] },
     ],
   },
