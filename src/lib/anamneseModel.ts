@@ -133,12 +133,12 @@ export const ANAMNESE_STEPS: AnamneseStep[] = [
     ],
   },
   {
-    id: 'prioridade', group: 'Seu perfil', title: 'No fim das contas, o que mais pesa pra você?',
+    id: 'prioridade', group: 'Seu perfil', title: 'Qual desses caminhos mais combina com você?',
     fields: [
       { key: 'prioridade', type: 'choice', label: null, options: [
-        { v: 'resultado', t: 'Ter o melhor resultado possível, independente do investimento' },
-        { v: 'equilibrio', t: 'Um bom equilíbrio entre qualidade e custo' },
-        { v: 'custo', t: 'Prefiro começar com um investimento menor e ir evoluindo aos poucos' },
+        { v: 'resultado', t: 'Quero o melhor resultado possível, e estou pronta(o) para investir nisso' },
+        { v: 'equilibrio', t: 'Gosto de equilibrar cuidado e praticidade, sem abrir mão da qualidade' },
+        { v: 'custo', t: 'Prefiro começar agora e ir construindo minha jornada aos poucos' },
       ] },
     ],
   },
@@ -204,7 +204,7 @@ export const ANAMNESE_STEPS: AnamneseStep[] = [
   },
 ]
 
-// ─── Classificação automática (regra fixa, sem IA) ──────────────────────────
+// ─── Classificação automática (regra fixa, sem IA) ─────────────────────────
 
 export interface AnamneseScore {
   interesseScore: number      // 0-100
