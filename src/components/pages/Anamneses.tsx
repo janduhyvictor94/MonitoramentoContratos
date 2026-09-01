@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { useParams, Link } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { Card, Badge, Button, EmptyState, Spinner, Input } from '@/components/ui'
+import { Card, Badge, Button, EmptyState, Spinner, Input, Modal } from '@/components/ui'
 import { formatDate, getInitials } from '@/lib/utils'
 import {
   ANAMNESE_STEPS, optionLabel, potencialColor, mesmoDiaColor,
@@ -10,7 +10,7 @@ import {
 } from '@/lib/anamneseModel'
 import { generatePDF, printElement } from '@/lib/pdf'
 import {
-  ClipboardList, Search, ChevronRight, Printer, Download, FolderOpen,
+  ClipboardList, Search, ChevronRight, Printer, Download, FolderOpen, Trash2,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -39,6 +39,8 @@ function fieldDisplayValue(field: AnamneseField, answers: Record<string, any>): 
 // ─── Lista ────────────────────────────────────────────────────────────────
 function AnamneseList() {
   const [search, setSearch] = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const qc = useQueryClient()
 
   const { data: anamneses, isLoading } = useQuery({
     queryKey: ['anamneses'],
@@ -49,6 +51,20 @@ function AnamneseList() {
         .order('created_at', { ascending: false })
       return data ?? []
     },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('anamneses').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['anamneses'] })
+      qc.invalidateQueries({ queryKey: ['patient-anamneses'] })
+      toast.success('Anamnese removida.')
+      setDeleteConfirm(null)
+    },
+    onError: (e: any) => toast.error(e.message),
   })
 
   const filtered = (anamneses as any[] ?? []).filter((a) =>
@@ -122,9 +138,18 @@ function AnamneseList() {
                     <td className="px-5 py-4 text-ink-700">{a.sent_at ? formatDate(a.sent_at) : '—'}</td>
                     <td className="px-5 py-4 text-ink-700">{a.preenchida_em ? formatDate(a.preenchida_em) : '—'}</td>
                     <td className="px-5 py-4">
-                      <Link to={`/anamneses/${a.id}`} className="rounded-md p-2 text-ink-400 hover:bg-gold-50 hover:text-gold-700 transition-colors inline-flex">
-                        <ChevronRight size={15} />
-                      </Link>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => setDeleteConfirm(a.id)}
+                          className="rounded-md p-2 text-ink-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                          title="Excluir anamnese"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                        <Link to={`/anamneses/${a.id}`} className="rounded-md p-2 text-ink-400 hover:bg-gold-50 hover:text-gold-700 transition-colors inline-flex">
+                          <ChevronRight size={15} />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -133,6 +158,21 @@ function AnamneseList() {
           </div>
         )}
       </Card>
+
+      <Modal open={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} title="Confirmar exclusão" size="sm">
+        <div className="px-6 py-5">
+          <p className="text-sm text-ink-700 mb-4">
+            Tem certeza que deseja excluir esta anamnese? Essa ação não pode ser desfeita — útil se o link foi enviado para o paciente errado ou por engano.
+          </p>
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setDeleteConfirm(null)}>Cancelar</Button>
+            <Button variant="danger" loading={deleteMutation.isPending}
+              onClick={() => deleteConfirm && deleteMutation.mutate(deleteConfirm)}>
+              Excluir
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
@@ -141,6 +181,9 @@ function AnamneseList() {
 function AnamneseViewer({ id }: { id: string }) {
   const contentRef = useRef<HTMLDivElement>(null)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const qc = useQueryClient()
+  const navigate = useNavigate()
 
   const { data: anamnese, isLoading } = useQuery({
     queryKey: ['anamnese', id],
@@ -152,6 +195,20 @@ function AnamneseViewer({ id }: { id: string }) {
         .single()
       return data as any
     },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('anamneses').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['anamneses'] })
+      qc.invalidateQueries({ queryKey: ['patient-anamneses'] })
+      toast.success('Anamnese removida.')
+      navigate('/anamneses')
+    },
+    onError: (e: any) => toast.error(e.message),
   })
 
   if (isLoading) return <div className="flex justify-center py-16"><Spinner /></div>
@@ -197,6 +254,13 @@ function AnamneseViewer({ id }: { id: string }) {
         <Link to={`/pastas/${anamnese.patient_id}`} className="text-sm text-gold-700 hover:underline flex items-center gap-1 ml-auto">
           <FolderOpen size={13} /> Ver pasta do paciente
         </Link>
+        <button
+          onClick={() => setDeleteConfirm(true)}
+          className="rounded-md p-2 text-ink-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+          title="Excluir anamnese"
+        >
+          <Trash2 size={15} />
+        </button>
       </div>
 
       {isPending ? (
@@ -259,6 +323,20 @@ function AnamneseViewer({ id }: { id: string }) {
           </Card>
         </>
       )}
+
+      <Modal open={deleteConfirm} onClose={() => setDeleteConfirm(false)} title="Confirmar exclusão" size="sm">
+        <div className="px-6 py-5">
+          <p className="text-sm text-ink-700 mb-4">
+            Tem certeza que deseja excluir esta anamnese? Essa ação não pode ser desfeita — útil se o link foi enviado para o paciente errado ou por engano.
+          </p>
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setDeleteConfirm(false)}>Cancelar</Button>
+            <Button variant="danger" loading={deleteMutation.isPending} onClick={() => deleteMutation.mutate()}>
+              Excluir
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
