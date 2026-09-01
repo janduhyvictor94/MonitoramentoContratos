@@ -4,9 +4,11 @@ import { useParams, Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { Card, Badge, Button, EmptyState, Spinner, Modal } from '@/components/ui'
 import { getInitials, getStatusColor, formatDate } from '@/lib/utils'
+import { potencialColor, mesmoDiaColor } from '@/lib/anamneseModel'
 import {
   FolderOpen, FileText, Search, ChevronRight, Trash2,
-  Phone, Mail, Calendar, CreditCard, MapPin, FileCheck
+  Phone, Mail, Calendar, CreditCard, MapPin, FileCheck,
+  ClipboardList, Link as LinkIcon, MessageCircle, Copy,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import type { Patient } from '@/types'
@@ -90,6 +92,8 @@ function FolderIndex() {
 // ── Patient folder ────────────────────────────────────────────────────────
 function PatientFolder({ id }: { id: string }) {
   const [deleteContractId, setDeleteContractId] = useState<string | null>(null)
+  const [showSendAnamnese, setShowSendAnamnese] = useState(false)
+  const [activeAnamnese, setActiveAnamnese] = useState<any>(null)
   const qc = useQueryClient()
 
   const { data: patient, isLoading } = useQuery({
@@ -110,6 +114,40 @@ function PatientFolder({ id }: { id: string }) {
         .order('created_at', { ascending: false })
       return data ?? []
     },
+  })
+
+  const { data: anamneses } = useQuery({
+    queryKey: ['patient-anamneses', id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('anamneses')
+        .select('*')
+        .eq('patient_id', id)
+        .order('created_at', { ascending: false })
+      return data ?? []
+    },
+  })
+
+  const pendingAnamnese = (anamneses ?? []).find((a: any) => a.status === 'pendente')
+  const latestFilledAnamnese = (anamneses ?? []).find((a: any) => a.status === 'preenchida')
+
+  const getOrCreateAnamneseMutation = useMutation({
+    mutationFn: async () => {
+      if (pendingAnamnese) return pendingAnamnese
+      const { data, error } = await supabase
+        .from('anamneses')
+        .insert({ patient_id: id })
+        .select()
+        .single()
+      if (error) throw error
+      return data
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['patient-anamneses', id] })
+      setActiveAnamnese(data)
+      setShowSendAnamnese(true)
+    },
+    onError: (e: any) => toast.error(e.message),
   })
 
   const { data: appointments } = useQuery({
@@ -185,6 +223,14 @@ function PatientFolder({ id }: { id: string }) {
             )}
           </div>
           <div className="flex gap-2 shrink-0">
+            <Button
+              variant="secondary"
+              icon={<ClipboardList size={15} />}
+              loading={getOrCreateAnamneseMutation.isPending}
+              onClick={() => getOrCreateAnamneseMutation.mutate()}
+            >
+              Enviar Anamnese
+            </Button>
             <Link to={`/contratos/novo?paciente=${patient.id}`}>
               <Button variant="gold" icon={<FileText size={15} />}>Gerar Contrato</Button>
             </Link>
@@ -211,43 +257,85 @@ function PatientFolder({ id }: { id: string }) {
         )}
       </Card>
 
+      {latestFilledAnamnese ? (
+        <Card className="bg-gold-50 border-gold-200">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="luxury-label text-gold-800 mb-2">Leitura da anamnese</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge label={`Potencial: ${latestFilledAnamnese.potencial}`} className={potencialColor(latestFilledAnamnese.potencial)} />
+                <Badge label={`Mesmo dia: ${latestFilledAnamnese.mesmo_dia}`} className={mesmoDiaColor(latestFilledAnamnese.mesmo_dia)} />
+              </div>
+            </div>
+            <Link to={`/anamneses/${latestFilledAnamnese.id}`}>
+              <Button variant="gold" size="sm" icon={<ClipboardList size={14} />}>Ver anamnese completa</Button>
+            </Link>
+          </div>
+        </Card>
+      ) : pendingAnamnese ? (
+        <Card className="bg-cream-100 border-ink-100">
+          <p className="text-sm text-ink-600">
+            Anamnese enviada, aguardando o paciente preencher. Assim que ele confirmar, a leitura de potencial aparece aqui.
+          </p>
+        </Card>
+      ) : null}
+
       <div className="grid lg:grid-cols-2 gap-5">
         <Card padding={false}>
           <div className="flex items-center justify-between px-6 py-5 border-b border-ink-100">
             <div>
-              <p className="luxury-label text-gold-700 mb-0.5">Documentos</p>
-              <h3 className="heading-serif text-lg">Contratos ({(contracts ?? []).length})</h3>
+              <p className="luxury-label text-gold-700 mb-0.5">Arquivo</p>
+              <h3 className="heading-serif text-lg">Documentos ({(contracts ?? []).length + (anamneses ?? []).filter((a: any) => a.status === 'preenchida').length})</h3>
             </div>
             <Link to={`/contratos/novo?paciente=${patient.id}`}>
-              <Button size="sm" variant="ghost">+ Novo</Button>
+              <Button size="sm" variant="ghost">+ Novo contrato</Button>
             </Link>
           </div>
           <div className="divide-y divide-ink-50">
-            {(contracts ?? []).length === 0 ? (
-              <p className="py-10 text-center text-sm text-ink-400">Nenhum contrato gerado.</p>
-            ) : (
-              (contracts as any[]).map((c) => (
-                <div key={c.id} className="flex items-center gap-3 px-6 py-4 hover:bg-cream-100 transition-colors group">
-                  <Link to={`/contratos/${c.id}`} className="flex items-center gap-3 flex-1 min-w-0">
+            {(() => {
+              const docs = [
+                ...(contracts as any[] ?? []).map((c) => ({
+                  kind: 'contrato' as const, id: c.id, titulo: c.titulo, date: c.created_at,
+                  badgeLabel: c.status, badgeClass: getStatusColor(c.status), href: `/contratos/${c.id}`,
+                })),
+                ...(anamneses as any[] ?? []).filter((a) => a.status === 'preenchida').map((a) => ({
+                  kind: 'anamnese' as const, id: a.id, titulo: 'Ficha de Anamnese', date: a.preenchida_em ?? a.created_at,
+                  badgeLabel: a.potencial ? `Potencial: ${a.potencial}` : 'Preenchida',
+                  badgeClass: a.potencial ? potencialColor(a.potencial) : 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
+                  href: `/anamneses/${a.id}`,
+                })),
+              ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+              if (docs.length === 0) {
+                return <p className="py-10 text-center text-sm text-ink-400">Nenhum documento ainda.</p>
+              }
+
+              return docs.map((d) => (
+                <div key={`${d.kind}-${d.id}`} className="flex items-center gap-3 px-6 py-4 hover:bg-cream-100 transition-colors group">
+                  <Link to={d.href} className="flex items-center gap-3 flex-1 min-w-0">
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gold-50">
-                      <FileText size={15} className="text-gold-700" />
+                      {d.kind === 'contrato'
+                        ? <FileText size={15} className="text-gold-700" />
+                        : <ClipboardList size={15} className="text-gold-700" />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-ink-900 truncate">{c.titulo}</p>
-                      <p className="text-xs text-ink-500">{formatDate(c.created_at)}</p>
+                      <p className="text-sm font-medium text-ink-900 truncate">{d.titulo}</p>
+                      <p className="text-xs text-ink-500">{formatDate(d.date)}</p>
                     </div>
-                    <Badge label={c.status} className={getStatusColor(c.status)} />
+                    <Badge label={d.badgeLabel} className={d.badgeClass} />
                   </Link>
-                  <button
-                    onClick={(e) => { e.preventDefault(); setDeleteContractId(c.id) }}
-                    className="opacity-0 group-hover:opacity-100 rounded-md p-2 text-ink-400 hover:bg-red-50 hover:text-red-500 transition-all"
-                    title="Excluir contrato"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {d.kind === 'contrato' && (
+                    <button
+                      onClick={(e) => { e.preventDefault(); setDeleteContractId(d.id) }}
+                      className="opacity-0 group-hover:opacity-100 rounded-md p-2 text-ink-400 hover:bg-red-50 hover:text-red-500 transition-all"
+                      title="Excluir contrato"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               ))
-            )}
+            })()}
           </div>
         </Card>
 
@@ -309,7 +397,121 @@ function PatientFolder({ id }: { id: string }) {
           </div>
         </div>
       </Modal>
+
+      <SendAnamneseModal
+        open={showSendAnamnese}
+        onClose={() => setShowSendAnamnese(false)}
+        anamnese={activeAnamnese}
+        patient={patient}
+      />
     </div>
+  )
+}
+
+// ─── Modal: Enviar Anamnese ─────────────────────────────────────────────────
+function SendAnamneseModal({
+  open, onClose, anamnese, patient,
+}: {
+  open: boolean
+  onClose: () => void
+  anamnese: any
+  patient: Patient
+}) {
+  const qc = useQueryClient()
+  if (!anamnese) return null
+
+  const anamneseUrl = `${window.location.origin}/anamnese/${anamnese.token}`
+
+  function copyLink() {
+    navigator.clipboard.writeText(anamneseUrl)
+    toast.success('Link copiado!')
+  }
+
+  async function markAsSent() {
+    await supabase.from('anamneses')
+      .update({ sent_at: new Date().toISOString() })
+      .eq('id', anamnese.id)
+    qc.invalidateQueries({ queryKey: ['patient-anamneses', patient.id] })
+  }
+
+  function openWhatsApp() {
+    const phone = patient.telefone?.replace(/\D/g, '') ?? ''
+    const message = `Olá ${patient.nome}! 👋\n\n` +
+      `Antes da sua consulta no Instituto Bruna Braga, pedimos que preencha a sua ficha de anamnese pelo link abaixo:\n\n` +
+      `${anamneseUrl}\n\n` +
+      `Leva menos de 5 minutos. Qualquer dúvida, estamos à disposição. 💛`
+
+    const url = phone
+      ? `https://wa.me/55${phone}?text=${encodeURIComponent(message)}`
+      : `https://wa.me/?text=${encodeURIComponent(message)}`
+    window.open(url, '_blank')
+    markAsSent()
+  }
+
+  function openEmail() {
+    const email = patient.email ?? ''
+    const subject = `Ficha de anamnese — Instituto Bruna Braga`
+    const body = `Olá ${patient.nome},\n\n` +
+      `Antes da sua consulta, pedimos que preencha sua ficha de anamnese pelo link abaixo:\n\n` +
+      `${anamneseUrl}\n\n` +
+      `Leva menos de 5 minutos.\n\n` +
+      `Atenciosamente,\nInstituto Bruna Braga`
+    window.open(`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank')
+    markAsSent()
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Enviar Anamnese" size="lg">
+      <div className="p-6 space-y-5">
+        <p className="text-sm text-ink-600">
+          Compartilhe o link abaixo com {patient.nome} para que preencha a anamnese antes da consulta:
+        </p>
+
+        <div className="rounded-lg border border-ink-200 bg-cream-100 p-3 flex items-center gap-2">
+          <LinkIcon size={15} className="text-gold-700 shrink-0" />
+          <code className="flex-1 text-xs text-ink-700 truncate">{anamneseUrl}</code>
+          <Button variant="gold" size="sm" icon={<Copy size={13} />} onClick={copyLink}>
+            Copiar
+          </Button>
+        </div>
+
+        <div className="gold-divider" />
+
+        <p className="luxury-label text-gold-700">Compartilhar diretamente</p>
+
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={openWhatsApp}
+            className="flex items-center gap-3 p-4 rounded-lg border-2 border-ink-100 hover:border-emerald-400 hover:bg-emerald-50 transition-all group"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 group-hover:bg-emerald-500 transition-colors">
+              <MessageCircle size={18} className="text-emerald-700 group-hover:text-white transition-colors" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-medium text-ink-900">WhatsApp</p>
+              <p className="text-xs text-ink-500">Abre com mensagem pronta</p>
+            </div>
+          </button>
+
+          <button
+            onClick={openEmail}
+            className="flex items-center gap-3 p-4 rounded-lg border-2 border-ink-100 hover:border-gold-400 hover:bg-gold-50 transition-all group"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gold-100 group-hover:bg-gold-500 transition-colors">
+              <Mail size={18} className="text-gold-700 group-hover:text-white transition-colors" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-medium text-ink-900">E-mail</p>
+              <p className="text-xs text-ink-500">Abre seu app de e-mail</p>
+            </div>
+          </button>
+        </div>
+
+        <div className="flex justify-end pt-2 border-t border-ink-100">
+          <Button variant="secondary" onClick={onClose}>Fechar</Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 

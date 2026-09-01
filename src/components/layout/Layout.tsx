@@ -4,6 +4,7 @@ import {
   Users,
   FolderOpen,
   FileText,
+  ClipboardList,
   Calendar,
   Settings,
   Variable,
@@ -17,6 +18,7 @@ const navItems = [
   { to: '/pacientes', label: 'Pacientes', icon: Users },
   { to: '/pastas', label: 'Pastas', icon: FolderOpen },
   { to: '/contratos', label: 'Contratos', icon: FileText },
+  { to: '/anamneses', label: 'Anamneses', icon: ClipboardList },
   { to: '/historico', label: 'Histórico', icon: Calendar },
   { to: '/variaveis', label: 'Variáveis', icon: Variable },
   { to: '/configuracoes', label: 'Configurações', icon: Settings },
@@ -74,12 +76,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           ))}
 
           <p className="px-3 pb-3 pt-6 luxury-label text-ink-500">Documentos</p>
-          {navItems.slice(3, 6).map((item) => (
+          {navItems.slice(3, 7).map((item) => (
             <SideNavItem key={item.to} {...item} onNavigate={() => setSidebarOpen(false)} />
           ))}
 
           <p className="px-3 pb-3 pt-6 luxury-label text-ink-500">Sistema</p>
-          {navItems.slice(6).map((item) => (
+          {navItems.slice(7).map((item) => (
             <SideNavItem key={item.to} {...item} onNavigate={() => setSidebarOpen(false)} />
           ))}
         </nav>

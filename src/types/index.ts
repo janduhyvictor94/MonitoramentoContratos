@@ -82,6 +82,24 @@ export interface Appointment {
   patient?: Patient
 }
 
+export interface Anamnese {
+  id: string
+  patient_id: string
+  token: string
+  status: 'pendente' | 'preenchida'
+  respostas: Record<string, any>
+  interesse_score?: number
+  investimento_score?: number
+  potencial?: 'Alto' | 'Médio' | 'Baixo'
+  mesmo_dia?: 'Sim' | 'Não' | 'Talvez'
+  confirm_nome?: string
+  sent_at?: string
+  preenchida_em?: string
+  created_at: string
+  updated_at: string
+  patient?: Patient
+}
+
 export interface ClinicSetting {
   id: string
   key: string
