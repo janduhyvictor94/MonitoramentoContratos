@@ -104,7 +104,17 @@ export const ANAMNESE_STEPS: AnamneseStep[] = [
       { key: 'mesmo_dia', type: 'choice', label: null, options: [
         { v: 'sim', t: 'Gostaria de já sair com o procedimento feito, se possível' },
         { v: 'depois', t: 'Prefiro decidir com calma após a avaliação' },
-        { v: 'nao_sei', t: 'Ainda não sei, quero entender as opções primeiro' },
+      ] },
+    ],
+  },
+  {
+    id: 'confianca_hoje', group: 'Seu interesse', title: 'O que ajudaria você a se sentir pronta(o) para começar hoje?',
+    fields: [
+      { key: 'confianca_hoje', type: 'choice', label: null, options: [
+        { v: 'ja_pronta', t: 'Já estou pronta(o), só falta agendar' },
+        { v: 'ver_resultados', t: 'Ver resultados reais de outras pacientes' },
+        { v: 'entender_passos', t: 'Entender bem cada etapa do procedimento' },
+        { v: 'conversar_equipe', t: 'Conversar com a equipe durante a consulta' },
       ] },
     ],
   },
@@ -116,6 +126,7 @@ export const ANAMNESE_STEPS: AnamneseStep[] = [
         { v: 'botox', t: 'Botox' }, { v: 'preenchimento', t: 'Preenchimento facial' },
         { v: 'bioestimulador', t: 'Bioestimulador de colágeno' }, { v: 'peeling', t: 'Peeling químico' },
         { v: 'laser', t: 'Laser' }, { v: 'skinbooster', t: 'Skinbooster' },
+        { v: 'tecnologias', t: 'Tecnologias (radiofrequência, ultrassom, etc.)' },
         { v: 'nunca', t: 'Nunca realizei' }, { v: 'outro', t: 'Outro' },
       ] },
       { key: 'procedimentos_outro', type: 'text', label: 'Qual?', placeholder: 'Conte pra gente',
@@ -137,7 +148,6 @@ export const ANAMNESE_STEPS: AnamneseStep[] = [
     fields: [
       { key: 'prioridade', type: 'choice', label: null, options: [
         { v: 'resultado', t: 'Quero o melhor resultado possível, e estou pronta(o) para investir nisso' },
-        { v: 'equilibrio', t: 'Gosto de equilibrar cuidado e praticidade, sem abrir mão da qualidade' },
         { v: 'custo', t: 'Prefiro começar agora e ir construindo minha jornada aos poucos' },
       ] },
     ],
@@ -204,7 +214,7 @@ export const ANAMNESE_STEPS: AnamneseStep[] = [
   },
 ]
 
-// ─── Classificação automática (regra fixa, sem IA) ─────────────────────────
+// ─── Classificação automática (regra fixa, sem IA) ──────────────────────────
 
 export interface AnamneseScore {
   interesseScore: number      // 0-100
@@ -218,15 +228,17 @@ export function computeAnamneseScore(answers: Record<string, any>): AnamneseScor
   if (answers.queixa && String(answers.queixa).trim().length > 0) interesse += 15
   if (answers.mesmo_dia === 'sim') interesse += 30
   else if (answers.mesmo_dia === 'depois') interesse += 15
-  else if (answers.mesmo_dia === 'nao_sei') interesse += 5
   if (answers.evento === 'sim') interesse += 20
   const vaidadeTier = parseInt(answers.vaidade || '0', 10)
   interesse += vaidadeTier * 5
-  const interesseScore = Math.min(100, Math.round((interesse / 85) * 100))
+  if (answers.confianca_hoje === 'ja_pronta') interesse += 15
+  else if (answers.confianca_hoje === 'ver_resultados') interesse += 8
+  else if (answers.confianca_hoje === 'entender_passos') interesse += 5
+  else if (answers.confianca_hoje === 'conversar_equipe') interesse += 5
+  const interesseScore = Math.min(100, Math.round((interesse / 100) * 100))
 
   let invest = 0
   if (answers.prioridade === 'resultado') invest += 35
-  else if (answers.prioridade === 'equilibrio') invest += 20
   else if (answers.prioridade === 'custo') invest += 5
   if (answers.abordagem === 'de_uma_vez') invest += 25
   else if (answers.abordagem === 'aos_poucos') invest += 15
@@ -244,7 +256,6 @@ export function computeAnamneseScore(answers: Record<string, any>): AnamneseScor
   let mesmoDia: AnamneseScore['mesmoDia'] = 'Talvez'
   if (answers.mesmo_dia === 'sim') mesmoDia = 'Sim'
   else if (answers.mesmo_dia === 'depois') mesmoDia = 'Não'
-  else if (answers.mesmo_dia === 'nao_sei') mesmoDia = 'Talvez'
 
   return { interesseScore, investimentoScore, potencial, mesmoDia }
 }
