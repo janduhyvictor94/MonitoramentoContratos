@@ -294,7 +294,7 @@ export default function PublicAnamnese() {
               </div>
               <h1 className="heading-serif text-2xl">Obrigada por concluir o preenchimento</h1>
               <p className="text-sm text-ink-600 max-w-xs">
-                Em instantes você será chamada(o) para continuar o atendimento com toda a atenção que você merece.
+                Estamos ansiosas para recebê-la(o) e cuidar de você com toda a atenção que merece.
               </p>
             </div>
           ) : screen === 0 ? (
