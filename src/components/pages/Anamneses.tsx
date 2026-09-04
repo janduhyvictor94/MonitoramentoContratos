@@ -10,7 +10,7 @@ import {
 } from '@/lib/anamneseModel'
 import { generatePDF, printElement } from '@/lib/pdf'
 import {
-  ClipboardList, Search, ChevronRight, Printer, Download, FolderOpen, Trash2,
+  ClipboardList, Search, ChevronRight, Printer, Download, FolderOpen, Trash2, MessageCircle,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -36,7 +36,7 @@ function fieldDisplayValue(field: AnamneseField, answers: Record<string, any>): 
   return String(val)
 }
 
-// ─── Lista ────────────────────────────────────────────────────────────────
+// ─── Lista ───────────────────────────────────────────────────────────────
 function AnamneseList() {
   const [search, setSearch] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
@@ -181,6 +181,7 @@ function AnamneseList() {
 function AnamneseViewer({ id }: { id: string }) {
   const contentRef = useRef<HTMLDivElement>(null)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
+  const [sendingDoctor, setSendingDoctor] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const qc = useQueryClient()
   const navigate = useNavigate()
@@ -196,6 +197,15 @@ function AnamneseViewer({ id }: { id: string }) {
       return data as any
     },
   })
+
+  const { data: clinicSettings } = useQuery({
+    queryKey: ['clinic-settings'],
+    queryFn: async () => {
+      const { data } = await supabase.from('clinic_settings').select('*').order('category').order('label')
+      return data ?? []
+    },
+  })
+  const doctorWhatsapp = (clinicSettings as any[] ?? []).find((s) => s.key === 'profissional_whatsapp')?.value ?? ''
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
@@ -232,6 +242,39 @@ function AnamneseViewer({ id }: { id: string }) {
   function handlePrint() {
     if (!contentRef.current) return
     printElement(contentRef.current, `Anamnese — ${anamnese.patients?.nome ?? ''}`)
+  }
+
+  async function handleSendDoctor() {
+    if (!contentRef.current) return
+    setSendingDoctor(true)
+    try {
+      // Baixa o PDF completo com todas as respostas — fica pronto para anexar no WhatsApp.
+      await generatePDF(contentRef.current, `Anamnese — ${anamnese.patients?.nome ?? ''}`)
+
+      const queixa = answers.queixa ? String(answers.queixa).trim() : ''
+      const message =
+        `📋 *Ficha de Anamnese — Instituto Bruna Braga*\n\n` +
+        `*Paciente:* ${anamnese.patients?.nome ?? '—'}\n` +
+        (anamnese.potencial ? `*Potencial:* ${anamnese.potencial}\n` : '') +
+        (anamnese.mesmo_dia ? `*Mesmo dia:* ${anamnese.mesmo_dia}\n` : '') +
+        (queixa ? `*Queixa principal:* ${queixa}\n` : '') +
+        `*Preenchida em:* ${anamnese.preenchida_em ? formatDate(anamnese.preenchida_em) : '—'}\n\n` +
+        `O PDF com a ficha completa acabou de ser baixado — é só anexar aqui. 📎`
+
+      const phone = doctorWhatsapp.replace(/\D/g, '')
+      const url = phone
+        ? `https://wa.me/55${phone}?text=${encodeURIComponent(message)}`
+        : `https://wa.me/?text=${encodeURIComponent(message)}`
+      window.open(url, '_blank')
+
+      if (!phone) {
+        toast('Dica: cadastre o WhatsApp da doutora em Configurações para abrir a conversa automaticamente.', { icon: 'ℹ️' })
+      }
+    } catch (e: any) {
+      toast.error('Erro ao preparar envio: ' + e.message)
+    } finally {
+      setSendingDoctor(false)
+    }
   }
 
   return (
@@ -275,8 +318,14 @@ function AnamneseViewer({ id }: { id: string }) {
             <Button variant="secondary" size="sm" icon={<Printer size={14} />} onClick={handlePrint}>
               Imprimir
             </Button>
-            <Button variant="gold" size="sm" icon={<Download size={14} />} onClick={handlePDF} loading={downloadingPdf}>
+            <Button variant="secondary" size="sm" icon={<Download size={14} />} onClick={handlePDF} loading={downloadingPdf}>
               Baixar PDF
+            </Button>
+            <Button
+              variant="gold" size="sm" icon={<MessageCircle size={14} />}
+              onClick={handleSendDoctor} loading={sendingDoctor}
+            >
+              Enviar para a doutora
             </Button>
           </div>
 
